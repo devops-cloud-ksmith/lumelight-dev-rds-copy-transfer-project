@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import swap_rds
 import migrate
+import config
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 logging.basicConfig(level=logging.INFO)
@@ -24,6 +25,16 @@ def progress():
     return jsonify(progress_log)
 
 
+@app.route('/config')
+def get_config():
+    """Return UI configuration such as order ranges and profiles."""
+    return jsonify({
+        'orderConfig': {region: info['range'] for region, info in config.ORDER_CONFIG.items()},
+        'srcProfiles': {region: info['profile'] for region, info in config.ORDER_CONFIG.items()},
+        'destProfiles': config.DEST_PROFILE,
+    })
+
+
 @app.route('/resources')
 def resources():
     """Return RDS instances for a given orderNo."""
@@ -36,6 +47,11 @@ def resources():
         regions = regions_param.split()
     else:
         regions = ['us-west-2', 'us-east-2']
+
+    for r in regions:
+        valid_range = config.ORDER_CONFIG.get(r, {}).get('range')
+        if valid_range and order_no not in valid_range:
+            return jsonify({'error': f'orderNo {order_no} invalid for {r}'}), 400
 
     src_profiles = None
     if src_profiles_param:
@@ -64,6 +80,11 @@ def swap_endpoint():
 
     if not order_no or not dest_profile or (not src_profile and not src_profiles):
         return jsonify({'error': 'orderNo and profiles required'}), 400
+
+    for r in regions:
+        valid_range = config.ORDER_CONFIG.get(r, {}).get('range')
+        if valid_range and order_no not in valid_range:
+            return jsonify({'error': f'orderNo {order_no} invalid for {r}'}), 400
 
     logger.info('Starting swap process for orderNo=%s', order_no)
 

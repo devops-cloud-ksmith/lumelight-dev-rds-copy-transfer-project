@@ -16,19 +16,26 @@
       const [instances, setInstances] = React.useState([]);
       const [log, setLog] = React.useState([]);
       const [region, setRegion] = React.useState('us-west-2');
+      const [destRegion, setDestRegion] = React.useState('us-west-2');
       const [polling, setPolling] = React.useState(false);
+      const [configData, setConfigData] = React.useState(null);
 
-      const orderConfig = {
-        'us-east-2': ['01', '02', '03'],
-        'us-west-2': Array.from({ length: 17 }, (_, i) => String(i + 4).padStart(2, '0')),
-      };
-      const orderOptions = orderConfig[region] || [];
+      React.useEffect(() => {
+        fetch('/config')
+          .then(res => res.json())
+          .then(setConfigData)
+          .catch(() => {});
+      }, []);
+
+      const orderOptions = configData ? (configData.orderConfig[region] || []) : [];
 
       const handleFetch = () => {
         const data = new FormData(document.querySelector('#swap-form'));
+        const regionSelect = document.querySelector('select[name="regions"]');
+        const regions = Array.from(regionSelect.selectedOptions).map(o => o.value);
         const params = new URLSearchParams({
           orderNo: data.get('orderNo'),
-          regions: data.get('regions'),
+          regions: regions.join(' '),
           srcProfiles: JSON.stringify({
             'us-west-2': data.get('srcProfileWest'),
             'us-east-2': data.get('srcProfileEast'),
@@ -47,6 +54,8 @@
           const [region, id] = cb.value.split('|');
           return { region, id };
         });
+        const regionSelect = document.querySelector('select[name="regions"]');
+        const regions = Array.from(regionSelect.selectedOptions).map(o => o.value);
         const payload = {
           orderNo: data.get('orderNo'),
           srcProfiles: {
@@ -54,8 +63,8 @@
             'us-east-2': data.get('srcProfileEast'),
           },
           destProfile: data.get('destProfile'),
-          regions: data.get('regions').split(' ').filter(Boolean),
-          destRegion: data.get('destRegion'),
+          regions,
+          destRegion: destRegion,
           dbClass: data.get('dbClass'),
           instances: selected,
         };
@@ -103,28 +112,36 @@
               <div className="col-md-3">
                 <label className="form-label">Src Profile us-west-2</label>
                 <select className="form-select" name="srcProfileWest">
-                  <option value="prodw">prodw</option>
+                  {configData && <option value={configData.srcProfiles['us-west-2']}>{configData.srcProfiles['us-west-2']}</option>}
                 </select>
               </div>
               <div className="col-md-3">
                 <label className="form-label">Src Profile us-east-2</label>
                 <select className="form-select" name="srcProfileEast">
-                  <option value="prode">prode</option>
+                  {configData && <option value={configData.srcProfiles['us-east-2']}>{configData.srcProfiles['us-east-2']}</option>}
                 </select>
               </div>
               <div className="col-md-2">
                 <label className="form-label">Dest Profile</label>
                 <select className="form-select" name="destProfile">
-                  <option value="devw">devw</option>
+                  {configData && <option value={configData.destProfiles['us-west-2']}>{configData.destProfiles['us-west-2']}</option>}
                 </select>
               </div>
               <div className="col-md-2">
                 <label className="form-label">Regions</label>
-                <input className="form-control" name="regions" defaultValue="us-west-2 us-east-2" />
+                <select className="form-select" name="regions" multiple size="2" defaultValue={[region]}>
+                  {configData && Object.keys(configData.orderConfig).map(r => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
               </div>
               <div className="col-md-2">
                 <label className="form-label">Dest Region</label>
-                <input className="form-control" name="destRegion" defaultValue="us-west-2" />
+                <select className="form-select" name="destRegion" value={destRegion} onChange={e => setDestRegion(e.target.value)}>
+                  {configData && Object.keys(configData.destProfiles).map(r => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
               </div>
               <div className="col-md-2">
                 <label className="form-label">DB Class</label>

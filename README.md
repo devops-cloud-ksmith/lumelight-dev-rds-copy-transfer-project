@@ -25,6 +25,10 @@ The script will:
 Restored instances will have the `orderNo` tag applied. The process runs concurrently for all specified regions to speed up execution.
 Important settings such as subnet groups, security groups and network accessibility are copied from the source instance so the replacement behaves the same in the target account.
 
+The web UI fetches its configuration from a `/config` endpoint. This provides
+valid `orderNo` ranges for each region and the AWS CLI profiles shown in the
+dropdowns.
+
 When using the web interface you can select AWS CLI profiles from predefined dropdowns:
 
 - **Source us-west-2** – profile `prodw`
@@ -56,6 +60,8 @@ python app.py
 The server listens on `0.0.0.0:5001`, so open `http://localhost:5001` in your browser. Fill out the form and submit to start the swap process.
 
 The frontend polls the `/progress` endpoint during a swap to display live log messages so you can monitor each stage of the migration.
+
+Send a GET request to `/config` to obtain the available regions, `orderNo` ranges and default profiles used by the UI.
 
 ## VPC and EC2 Migration
 
