@@ -210,6 +210,31 @@
       );
     }
 
+    function FlowView() {
+      return (
+        <div className="row mt-4">
+          <div className="col-md-6">
+            <h4>RDS Swap Flow</h4>
+            <ol>
+              <li>Select instances by <code>orderNo</code>.</li>
+              <li>Create snapshots without reboot.</li>
+              <li>Share and copy snapshots to destination.</li>
+              <li>Restore new instances and tag with <code>orderNo</code>.</li>
+            </ol>
+          </div>
+          <div className="col-md-6">
+            <h4>VPC &amp; EC2 Migration Flow</h4>
+            <ol>
+              <li>Find VPCs and instances with matching <code>orderNo</code>.</li>
+              <li>Replicate VPC structure and tags.</li>
+              <li>Create and share AMIs of source instances.</li>
+              <li>Copy AMIs and launch instances in destination.</li>
+            </ol>
+          </div>
+        </div>
+      );
+    }
+
     function App() {
       const [tab, setTab] = React.useState('swap');
 
@@ -223,8 +248,13 @@
             <li className="nav-item">
               <button className={`nav-link ${tab === 'migrate' ? 'active' : ''}`} onClick={() => setTab('migrate')}>Migrate VPC & EC2</button>
             </li>
+            <li className="nav-item">
+              <button className={`nav-link ${tab === 'flow' ? 'active' : ''}`} onClick={() => setTab('flow')}>Flow Overview</button>
+            </li>
           </ul>
-          {tab === 'swap' ? <SwapForm /> : <MigrateForm />}
+          {tab === 'swap' && <SwapForm />}
+          {tab === 'migrate' && <MigrateForm />}
+          {tab === 'flow' && <FlowView />}
         </div>
       );
     }

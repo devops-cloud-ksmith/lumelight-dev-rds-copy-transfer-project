@@ -71,3 +71,19 @@ python migrate.py \
 
 This creates matching VPCs and AMIs in the destination account and launches new instances from those images. The web interface exposes a "Migrate VPC & EC2" tab for triggering the same workflow.
 
+## Flow Overview
+
+The web UI includes a *Flow Overview* tab that summarizes both migration paths:
+
+**RDS Swap Flow**
+1. Select source RDS instances by `orderNo`.
+2. Create snapshots in each source region without rebooting.
+3. Share and copy snapshots to the destination account.
+4. Restore new RDS instances in the destination region and apply the same tags.
+
+**VPC & EC2 Migration Flow**
+1. Locate VPCs and EC2 instances tagged with `orderNo`.
+2. Recreate the VPC structure and tags in the destination account.
+3. Create AMIs of source instances, share and copy them.
+4. Launch new EC2 instances from the copied images.
+
