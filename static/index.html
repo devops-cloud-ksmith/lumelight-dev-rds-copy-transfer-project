@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>RDS Swap</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <script crossorigin src="https://unpkg.com/react@17/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+</head>
+<body class="p-4">
+  <div id="root"></div>
+  <script type="text/babel">
+    function App() {
+      const [status, setStatus] = React.useState('');
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        const data = new FormData(e.target);
+        const payload = {
+          orderNo: data.get('orderNo'),
+          srcProfile: data.get('srcProfile'),
+          destProfile: data.get('destProfile'),
+          regions: data.get('regions').split(' ').filter(Boolean),
+          destRegion: data.get('destRegion'),
+          dbClass: data.get('dbClass')
+        };
+        fetch('/swap', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).then(res => res.json()).then(d => setStatus(JSON.stringify(d))).catch(err => setStatus('Error'));
+      };
+
+      return (
+        <div className="container">
+          <h1 className="mb-4">Swap RDS Instances</h1>
+          <form onSubmit={handleSubmit}>
+            <div className="mb-3">
+              <label className="form-label">orderNo</label>
+              <input className="form-control" name="orderNo" required />
+            </div>
+            <div className="mb-3">
+              <label className="form-label">Source Profile</label>
+              <input className="form-control" name="srcProfile" required />
+            </div>
+            <div className="mb-3">
+              <label className="form-label">Destination Profile</label>
+              <input className="form-control" name="destProfile" required />
+            </div>
+            <div className="mb-3">
+              <label className="form-label">Regions (space separated)</label>
+              <input className="form-control" name="regions" defaultValue="us-west-2 us-east-2" />
+            </div>
+            <div className="mb-3">
+              <label className="form-label">Destination Region</label>
+              <input className="form-control" name="destRegion" defaultValue="us-west-2" />
+            </div>
+            <div className="mb-3">
+              <label className="form-label">DB Class</label>
+              <input className="form-control" name="dbClass" defaultValue="db.t3.micro" />
+            </div>
+            <button type="submit" className="btn btn-primary">Start</button>
+          </form>
+          {status && <pre className="mt-3">{status}</pre>}
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
