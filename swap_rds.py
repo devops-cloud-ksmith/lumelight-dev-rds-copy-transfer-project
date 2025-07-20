@@ -89,6 +89,40 @@ def restore_from_snapshot(dest_rds, snapshot_id, instance_id, db_class, order_no
     logger.info('Restored instance %s is available', instance_id)
 
 
+def list_instances(order_no, src_profile, regions=None, src_profiles=None):
+    """Return identifiers of RDS instances matching ``order_no``.
+
+    Parameters
+    ----------
+    order_no : str
+        Value for the ``orderNo`` tag.
+    src_profile : str
+        Default profile to use when creating sessions.
+    regions : list[str], optional
+        Regions to search. Defaults to ``['us-west-2', 'us-east-2']``.
+    src_profiles : dict[str, str], optional
+        Optional mapping of region to profile to override ``src_profile``.
+
+    Returns
+    -------
+    list[dict]
+        Each dict contains ``region`` and ``id`` of an RDS instance.
+    """
+    if regions is None:
+        regions = ['us-west-2', 'us-east-2']
+
+    if src_profiles is None:
+        src_profiles = {region: src_profile for region in regions}
+
+    results = []
+    for region in regions:
+        session = boto3.Session(profile_name=src_profiles.get(region, src_profile))
+        instances = get_rds_instances(session, region, order_no)
+        for inst in instances:
+            results.append({'region': region, 'id': inst['DBInstanceIdentifier']})
+    return results
+
+
 def process_region(order_no, src_profile, dest_profile, region, dest_region, db_class):
     """Handle the snapshot copy and restore for a single region."""
     src_session = boto3.Session(profile_name=src_profile)

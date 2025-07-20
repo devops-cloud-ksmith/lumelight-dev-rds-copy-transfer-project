@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 import logging
+import json
 from concurrent.futures import ThreadPoolExecutor
 
 import swap_rds
@@ -13,6 +14,33 @@ executor = ThreadPoolExecutor(max_workers=1)
 @app.route('/')
 def index():
     return app.send_static_file('index.html')
+
+
+@app.route('/resources')
+def resources():
+    """Return RDS instances for a given orderNo."""
+    order_no = request.args.get('orderNo')
+    src_profile = request.args.get('srcProfile')
+    src_profiles_param = request.args.get('srcProfiles')
+    regions_param = request.args.get('regions')
+
+    if regions_param:
+        regions = regions_param.split()
+    else:
+        regions = ['us-west-2', 'us-east-2']
+
+    src_profiles = None
+    if src_profiles_param:
+        try:
+            src_profiles = json.loads(src_profiles_param)
+        except Exception:
+            return jsonify({'error': 'invalid srcProfiles'}), 400
+
+    if not order_no or (not src_profile and not src_profiles):
+        return jsonify({'error': 'orderNo and profiles required'}), 400
+
+    instances = swap_rds.list_instances(order_no, src_profile, regions, src_profiles)
+    return jsonify(instances)
 
 @app.route('/swap', methods=['POST'])
 def swap_endpoint():

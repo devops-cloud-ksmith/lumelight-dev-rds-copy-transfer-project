@@ -13,6 +13,13 @@
   <script type="text/babel">
     function App() {
       const [status, setStatus] = React.useState('');
+      const [instances, setInstances] = React.useState([]);
+
+      const orderOptions = [];
+      for (let i = 1; i <= 99; i++) {
+        orderOptions.push(i.toString().padStart(2, '0'));
+      }
+
       const handleSubmit = (e) => {
         e.preventDefault();
         const data = new FormData(e.target);
@@ -34,13 +41,31 @@
         }).then(res => res.json()).then(d => setStatus(JSON.stringify(d))).catch(err => setStatus('Error'));
       };
 
+      const handleFetch = () => {
+        const data = new FormData(document.querySelector('form'));
+        const params = new URLSearchParams({
+          orderNo: data.get('orderNo'),
+          regions: data.get('regions'),
+          srcProfiles: JSON.stringify({
+            'us-west-2': data.get('srcProfileWest'),
+            'us-east-2': data.get('srcProfileEast'),
+          }),
+        });
+        fetch('/resources?' + params.toString())
+          .then(res => res.json())
+          .then(setInstances)
+          .catch(() => setInstances([]));
+      };
+
       return (
         <div className="container">
           <h1 className="mb-4">Swap RDS Instances</h1>
           <form onSubmit={handleSubmit}>
             <div className="mb-3">
               <label className="form-label">orderNo</label>
-              <input className="form-control" name="orderNo" required />
+              <select className="form-select" name="orderNo">
+                {orderOptions.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
             </div>
             <div className="mb-3">
               <label className="form-label">Source Profile (us-west-2)</label>
@@ -72,8 +97,16 @@
               <label className="form-label">DB Class</label>
               <input className="form-control" name="dbClass" defaultValue="db.t3.micro" />
             </div>
+            <button type="button" className="btn btn-secondary me-2" onClick={handleFetch}>List Instances</button>
             <button type="submit" className="btn btn-primary">Start</button>
           </form>
+          {instances.length > 0 && (
+            <ul className="mt-3">
+              {instances.map((i, idx) => (
+                <li key={idx}>{i.region}: {i.id}</li>
+              ))}
+            </ul>
+          )}
           {status && <pre className="mt-3">{status}</pre>}
         </div>
       );

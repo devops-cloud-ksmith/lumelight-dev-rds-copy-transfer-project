@@ -30,6 +30,12 @@ When using the web interface you can select AWS CLI profiles from predefined dro
 - **Source us-east-2** – profile `prode`
 - **Destination us-west-2** – profile `devw`
 
+The `orderNo` field is provided as a dropdown with values `01` through `99`. You can fetch the list of matching RDS instances before starting the swap.
+
+### List resources
+
+Send a GET request to `/resources` with `orderNo`, `regions`, and `srcProfiles` parameters to retrieve the instances that will be processed. The parameters mirror those used for `/swap`.
+
 ## Web UI
 
 You can also launch a small Flask application that exposes the functionality via a REST endpoint and a lightweight React + Bootstrap interface.
