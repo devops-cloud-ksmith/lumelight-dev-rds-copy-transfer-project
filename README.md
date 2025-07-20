@@ -53,7 +53,7 @@ pip install flask boto3
 python app.py
 ```
 
-Then open `http://localhost:5001` in your browser. Fill out the form and submit to start the swap process.
+The server listens on `0.0.0.0:5001`, so open `http://localhost:5001` in your browser. Fill out the form and submit to start the swap process.
 
 ## VPC and EC2 Migration
 
