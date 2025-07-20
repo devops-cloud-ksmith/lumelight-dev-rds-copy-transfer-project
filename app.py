@@ -4,6 +4,7 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 
 import swap_rds
+import migrate
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 logging.basicConfig(level=logging.INFO)
@@ -69,6 +70,24 @@ def swap_endpoint():
         src_profiles,
         instances,
     )
+    return jsonify({'status': 'started'})
+
+
+@app.route('/migrate', methods=['POST'])
+def migrate_endpoint():
+    """Migrate VPCs and EC2 instances based on orderNo."""
+    data = request.get_json(force=True)
+    order_no = data.get('orderNo')
+    src_profile = data.get('srcProfile')
+    dest_profile = data.get('destProfile')
+    region = data.get('region', 'us-west-2')
+    instance_type = data.get('instanceType', 't3.micro')
+
+    if not order_no or not src_profile or not dest_profile:
+        return jsonify({'error': 'orderNo, srcProfile and destProfile required'}), 400
+
+    logger.info('Starting migration orderNo=%s', order_no)
+    executor.submit(migrate.migrate_resources, order_no, src_profile, dest_profile, region, instance_type)
     return jsonify({'status': 'started'})
 
 if __name__ == '__main__':

@@ -55,3 +55,17 @@ python app.py
 
 Then open `http://localhost:5000` in your browser. Fill out the form and submit to start the swap process.
 
+## VPC and EC2 Migration
+
+The repository also includes `migrate.py` for copying VPCs and EC2 instances between accounts using the same `orderNo` tag.
+
+```bash
+python migrate.py \
+    --order-no <ORDER_NO> \
+    --src-profile <source-profile> \
+    --dest-profile <destination-profile> \
+    --region us-west-2
+```
+
+This creates matching VPCs and AMIs in the destination account and launches new instances from those images. The web interface exposes a "Migrate VPC & EC2" tab for triggering the same workflow.
+

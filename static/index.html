@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>RDS Swap</title>
+  <title>AWS Migration Tool</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <script crossorigin src="https://unpkg.com/react@17/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
@@ -11,17 +11,33 @@
 <body class="p-4">
   <div id="root"></div>
   <script type="text/babel">
-    function App() {
+    function SwapForm() {
       const [status, setStatus] = React.useState('');
       const [instances, setInstances] = React.useState([]);
 
       const orderConfig = {
         'us-east-2': ['01', '02', '03'],
-        'us-west-2': Array.from({length: 17}, (_, i) => String(i + 4).padStart(2, '0')),
+        'us-west-2': Array.from({ length: 17 }, (_, i) => String(i + 4).padStart(2, '0')),
       };
       const orderOptions = Array.from(new Set(Object.values(orderConfig).flat()));
 
-      const handleSubmit = (e) => {
+      const handleFetch = () => {
+        const data = new FormData(document.querySelector('#swap-form'));
+        const params = new URLSearchParams({
+          orderNo: data.get('orderNo'),
+          regions: data.get('regions'),
+          srcProfiles: JSON.stringify({
+            'us-west-2': data.get('srcProfileWest'),
+            'us-east-2': data.get('srcProfileEast'),
+          }),
+        });
+        fetch('/resources?' + params.toString())
+          .then(res => res.json())
+          .then(setInstances)
+          .catch(() => setInstances([]));
+      };
+
+      const handleSubmit = e => {
         e.preventDefault();
         const data = new FormData(e.target);
         const selected = Array.from(document.querySelectorAll('input[id^="inst-"]:checked')).map(cb => {
@@ -38,73 +54,63 @@
           regions: data.get('regions').split(' ').filter(Boolean),
           destRegion: data.get('destRegion'),
           dbClass: data.get('dbClass'),
-          instances: selected
+          instances: selected,
         };
         fetch('/swap', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        }).then(res => res.json()).then(d => setStatus(JSON.stringify(d))).catch(err => setStatus('Error'));
-      };
-
-      const handleFetch = () => {
-        const data = new FormData(document.querySelector('form'));
-        const params = new URLSearchParams({
-          orderNo: data.get('orderNo'),
-          regions: data.get('regions'),
-          srcProfiles: JSON.stringify({
-            'us-west-2': data.get('srcProfileWest'),
-            'us-east-2': data.get('srcProfileEast'),
-          }),
-        });
-        fetch('/resources?' + params.toString())
+          body: JSON.stringify(payload),
+        })
           .then(res => res.json())
-          .then(setInstances)
-          .catch(() => setInstances([]));
+          .then(d => setStatus(JSON.stringify(d)))
+          .catch(() => setStatus('Error'));
       };
 
       return (
-        <div className="container">
-          <h1 className="mb-4">Swap RDS Instances</h1>
-          <form onSubmit={handleSubmit}>
-            <div className="mb-3">
-              <label className="form-label">orderNo</label>
-              <select className="form-select" name="orderNo">
-                {orderOptions.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
+        <div>
+          <form id="swap-form" onSubmit={handleSubmit}>
+            <div className="row g-3">
+              <div className="col-md-2">
+                <label className="form-label">orderNo</label>
+                <select className="form-select" name="orderNo">
+                  {orderOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div className="col-md-3">
+                <label className="form-label">Src Profile us-west-2</label>
+                <select className="form-select" name="srcProfileWest">
+                  <option value="prodw">prodw</option>
+                </select>
+              </div>
+              <div className="col-md-3">
+                <label className="form-label">Src Profile us-east-2</label>
+                <select className="form-select" name="srcProfileEast">
+                  <option value="prode">prode</option>
+                </select>
+              </div>
+              <div className="col-md-2">
+                <label className="form-label">Dest Profile</label>
+                <select className="form-select" name="destProfile">
+                  <option value="devw">devw</option>
+                </select>
+              </div>
+              <div className="col-md-2">
+                <label className="form-label">Regions</label>
+                <input className="form-control" name="regions" defaultValue="us-west-2 us-east-2" />
+              </div>
+              <div className="col-md-2">
+                <label className="form-label">Dest Region</label>
+                <input className="form-control" name="destRegion" defaultValue="us-west-2" />
+              </div>
+              <div className="col-md-2">
+                <label className="form-label">DB Class</label>
+                <input className="form-control" name="dbClass" defaultValue="db.t3.micro" />
+              </div>
             </div>
-            <div className="mb-3">
-              <label className="form-label">Source Profile (us-west-2)</label>
-              <select className="form-select" name="srcProfileWest">
-                <option value="prodw">prodw</option>
-              </select>
+            <div className="mt-3">
+              <button type="button" className="btn btn-secondary me-2" onClick={handleFetch}>List Instances</button>
+              <button type="submit" className="btn btn-primary">Start Swap</button>
             </div>
-            <div className="mb-3">
-              <label className="form-label">Source Profile (us-east-2)</label>
-              <select className="form-select" name="srcProfileEast">
-                <option value="prode">prode</option>
-              </select>
-            </div>
-            <div className="mb-3">
-              <label className="form-label">Destination Profile</label>
-              <select className="form-select" name="destProfile">
-                <option value="devw">devw</option>
-              </select>
-            </div>
-            <div className="mb-3">
-              <label className="form-label">Regions (space separated)</label>
-              <input className="form-control" name="regions" defaultValue="us-west-2 us-east-2" />
-            </div>
-            <div className="mb-3">
-              <label className="form-label">Destination Region</label>
-              <input className="form-control" name="destRegion" defaultValue="us-west-2" />
-            </div>
-            <div className="mb-3">
-              <label className="form-label">DB Class</label>
-              <input className="form-control" name="dbClass" defaultValue="db.t3.micro" />
-            </div>
-            <button type="button" className="btn btn-secondary me-2" onClick={handleFetch}>List Instances</button>
-            <button type="submit" className="btn btn-primary">Start</button>
           </form>
           {instances.length > 0 && (
             <div className="mt-3">
@@ -118,6 +124,80 @@
             </div>
           )}
           {status && <pre className="mt-3">{status}</pre>}
+        </div>
+      );
+    }
+
+    function MigrateForm() {
+      const [status, setStatus] = React.useState('');
+
+      const handleSubmit = e => {
+        e.preventDefault();
+        const data = new FormData(e.target);
+        const payload = {
+          orderNo: data.get('orderNo'),
+          srcProfile: data.get('srcProfile'),
+          destProfile: data.get('destProfile'),
+          region: data.get('region'),
+          instanceType: data.get('instanceType'),
+        };
+        fetch('/migrate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+          .then(res => res.json())
+          .then(d => setStatus(JSON.stringify(d)))
+          .catch(() => setStatus('Error'));
+      };
+
+      return (
+        <form id="migrate-form" onSubmit={handleSubmit}>
+          <div className="row g-3">
+            <div className="col-md-2">
+              <label className="form-label">orderNo</label>
+              <input className="form-control" name="orderNo" required />
+            </div>
+            <div className="col-md-3">
+              <label className="form-label">Source Profile</label>
+              <input className="form-control" name="srcProfile" required />
+            </div>
+            <div className="col-md-3">
+              <label className="form-label">Destination Profile</label>
+              <input className="form-control" name="destProfile" required />
+            </div>
+            <div className="col-md-2">
+              <label className="form-label">Region</label>
+              <input className="form-control" name="region" value="us-west-2" />
+            </div>
+            <div className="col-md-2">
+              <label className="form-label">Instance Type</label>
+              <input className="form-control" name="instanceType" value="t3.micro" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <button type="submit" className="btn btn-primary">Start Migration</button>
+          </div>
+          {status && <pre className="mt-3">{status}</pre>}
+        </form>
+      );
+    }
+
+    function App() {
+      const [tab, setTab] = React.useState('swap');
+
+      return (
+        <div className="container">
+          <h1 className="mb-4">AWS Migration Tool</h1>
+          <ul className="nav nav-tabs mb-3">
+            <li className="nav-item">
+              <button className={`nav-link ${tab === 'swap' ? 'active' : ''}`} onClick={() => setTab('swap')}>Swap RDS</button>
+            </li>
+            <li className="nav-item">
+              <button className={`nav-link ${tab === 'migrate' ? 'active' : ''}`} onClick={() => setTab('migrate')}>Migrate VPC & EC2</button>
+            </li>
+          </ul>
+          {tab === 'swap' ? <SwapForm /> : <MigrateForm />}
         </div>
       );
     }
