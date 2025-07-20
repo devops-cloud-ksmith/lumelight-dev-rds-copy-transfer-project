@@ -56,18 +56,27 @@ def get_instance_settings(inst):
     return settings
 
 
-def create_snapshot(rds, instance_id):
+def create_snapshot(rds, instance_id, progress_cb=None):
     snap_id = f'{instance_id}-{int(time.time())}'
-    logger.info('Creating snapshot %s', snap_id)
+    msg = f'Creating snapshot {snap_id}'
+    logger.info(msg)
+    if progress_cb:
+        progress_cb(msg)
     rds.create_db_snapshot(DBInstanceIdentifier=instance_id, DBSnapshotIdentifier=snap_id)
     waiter = rds.get_waiter('db_snapshot_available')
     waiter.wait(DBSnapshotIdentifier=snap_id)
-    logger.info('Snapshot %s is ready', snap_id)
+    msg = f'Snapshot {snap_id} is ready'
+    logger.info(msg)
+    if progress_cb:
+        progress_cb(msg)
     return snap_id
 
 
-def share_snapshot(rds, snapshot_id, dest_account_id):
-    logger.info('Sharing snapshot %s with %s', snapshot_id, dest_account_id)
+def share_snapshot(rds, snapshot_id, dest_account_id, progress_cb=None):
+    msg = f'Sharing snapshot {snapshot_id} with {dest_account_id}'
+    logger.info(msg)
+    if progress_cb:
+        progress_cb(msg)
     rds.modify_db_snapshot_attribute(
         DBSnapshotIdentifier=snapshot_id,
         AttributeName='restore',
@@ -75,9 +84,12 @@ def share_snapshot(rds, snapshot_id, dest_account_id):
     )
 
 
-def copy_snapshot(dest_rds, source_region, snapshot_id, dest_snapshot_id, source_account_id):
+def copy_snapshot(dest_rds, source_region, snapshot_id, dest_snapshot_id, source_account_id, progress_cb=None):
     source_arn = f'arn:aws:rds:{source_region}:{source_account_id}:snapshot:{snapshot_id}'
-    logger.info('Copying snapshot %s to %s as %s', source_arn, dest_rds.meta.region_name, dest_snapshot_id)
+    msg = f'Copying snapshot {source_arn} to {dest_rds.meta.region_name} as {dest_snapshot_id}'
+    logger.info(msg)
+    if progress_cb:
+        progress_cb(msg)
     dest_rds.copy_db_snapshot(
         SourceDBSnapshotIdentifier=source_arn,
         TargetDBSnapshotIdentifier=dest_snapshot_id,
@@ -85,11 +97,17 @@ def copy_snapshot(dest_rds, source_region, snapshot_id, dest_snapshot_id, source
     )
     waiter = dest_rds.get_waiter('db_snapshot_available')
     waiter.wait(DBSnapshotIdentifier=dest_snapshot_id)
-    logger.info('Snapshot copy %s is ready', dest_snapshot_id)
+    msg = f'Snapshot copy {dest_snapshot_id} is ready'
+    logger.info(msg)
+    if progress_cb:
+        progress_cb(msg)
 
 
-def restore_from_snapshot(dest_rds, snapshot_id, instance_id, db_class, order_no, settings):
-    logger.info('Restoring instance %s from snapshot %s', instance_id, snapshot_id)
+def restore_from_snapshot(dest_rds, snapshot_id, instance_id, db_class, order_no, settings, progress_cb=None):
+    msg = f'Restoring instance {instance_id} from snapshot {snapshot_id}'
+    logger.info(msg)
+    if progress_cb:
+        progress_cb(msg)
     params = {
         'DBInstanceIdentifier': instance_id,
         'DBSnapshotIdentifier': snapshot_id,
@@ -110,7 +128,10 @@ def restore_from_snapshot(dest_rds, snapshot_id, instance_id, db_class, order_no
     waiter.wait(DBInstanceIdentifier=instance_id)
     arn = dest_rds.describe_db_instances(DBInstanceIdentifier=instance_id)['DBInstances'][0]['DBInstanceArn']
     dest_rds.add_tags_to_resource(ResourceName=arn, Tags=[{'Key': 'orderNo', 'Value': order_no}])
-    logger.info('Restored instance %s is available', instance_id)
+    msg = f'Restored instance {instance_id} is available'
+    logger.info(msg)
+    if progress_cb:
+        progress_cb(msg)
 
 
 def list_instances(order_no, src_profile, regions=None, src_profiles=None):
@@ -151,7 +172,7 @@ def list_instances(order_no, src_profile, regions=None, src_profiles=None):
     return results
 
 
-def process_region(order_no, src_profile, dest_profile, region, dest_region, db_class, instance_ids=None):
+def process_region(order_no, src_profile, dest_profile, region, dest_region, db_class, instance_ids=None, progress_cb=None):
     """Handle the snapshot copy and restore for a single region."""
     src_session = boto3.Session(profile_name=src_profile)
     dest_session = boto3.Session(profile_name=dest_profile)
@@ -172,15 +193,15 @@ def process_region(order_no, src_profile, dest_profile, region, dest_region, db_
     for inst in instances:
         inst_id = inst['DBInstanceIdentifier']
         settings = get_instance_settings(inst)
-        snap_id = create_snapshot(src_rds, inst_id)
-        share_snapshot(src_rds, snap_id, dest_account_id)
+        snap_id = create_snapshot(src_rds, inst_id, progress_cb)
+        share_snapshot(src_rds, snap_id, dest_account_id, progress_cb)
         dest_snap_id = f'copy-{snap_id}'
-        copy_snapshot(dest_rds, region, snap_id, dest_snap_id, src_account_id)
+        copy_snapshot(dest_rds, region, snap_id, dest_snap_id, src_account_id, progress_cb)
         restore_id = f'{inst_id}-copy'
-        restore_from_snapshot(dest_rds, dest_snap_id, restore_id, db_class, order_no, settings)
+        restore_from_snapshot(dest_rds, dest_snap_id, restore_id, db_class, order_no, settings, progress_cb)
 
 
-def run_swap(order_no, src_profile, dest_profile, regions=None, dest_region='us-west-2', db_class='db.t3.micro', src_profiles=None, instances=None):
+def run_swap(order_no, src_profile, dest_profile, regions=None, dest_region='us-west-2', db_class='db.t3.micro', src_profiles=None, instances=None, progress_cb=None):
     """Run the snapshot copy and restore process programmatically.
 
     Parameters
@@ -202,6 +223,8 @@ def run_swap(order_no, src_profile, dest_profile, regions=None, dest_region='us-
         specified regions.
     instances : list[dict], optional
         Specific instances to process. Each dict must include ``region`` and ``id``.
+    progress_cb : callable, optional
+        Callback for progress messages.
     """
     if regions is None:
         regions = ['us-west-2', 'us-east-2']
@@ -226,11 +249,14 @@ def run_swap(order_no, src_profile, dest_profile, regions=None, dest_region='us-
                 dest_region,
                 db_class,
                 region_instances.get(region) if instances else None,
+                progress_cb,
             )
             for region in regions
         ]
         for f in futures:
             f.result()
+    if progress_cb:
+        progress_cb('Completed')
 
 
 def main():

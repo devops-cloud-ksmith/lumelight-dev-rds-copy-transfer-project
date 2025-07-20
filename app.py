@@ -10,11 +10,18 @@ app = Flask(__name__, static_folder='static', static_url_path='')
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 executor = ThreadPoolExecutor(max_workers=1)
+progress_log: list[str] = []
 
 
 @app.route('/')
 def index():
     return app.send_static_file('index.html')
+
+
+@app.route('/progress')
+def progress():
+    """Return progress log of the most recent operation."""
+    return jsonify(progress_log)
 
 
 @app.route('/resources')
@@ -59,6 +66,13 @@ def swap_endpoint():
         return jsonify({'error': 'orderNo and profiles required'}), 400
 
     logger.info('Starting swap process for orderNo=%s', order_no)
+
+    progress_log.clear()
+
+    def progress_cb(msg):
+        progress_log.append(msg)
+        logger.info(msg)
+
     executor.submit(
         swap_rds.run_swap,
         order_no,
@@ -69,6 +83,7 @@ def swap_endpoint():
         db_class,
         src_profiles,
         instances,
+        progress_cb,
     )
     return jsonify({'status': 'started'})
 

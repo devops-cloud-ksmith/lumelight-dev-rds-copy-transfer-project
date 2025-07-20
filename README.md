@@ -31,12 +31,12 @@ When using the web interface you can select AWS CLI profiles from predefined dro
 - **Source us-east-2** – profile `prode`
 - **Destination us-west-2** – profile `devw`
 
-The `orderNo` dropdown is generated from a configuration mapping:
+The UI lets you first choose a region and then the `orderNo` dropdown updates according to this configuration:
 
-- `us-east-2` &ndash; values `01`&ndash;`03`
-- `us-west-2` &ndash; values `04`&ndash;`20`
+- `us-east-2` – values `01`–`03`
+- `us-west-2` – values `04`–`20`
 
-The web page allows you to list resources for a chosen order number and select which specific instances to swap.
+You can fetch the list of matching RDS instances for the selected order number and pick exactly which ones to copy and restore in the destination account.
 
 ### List resources
 
@@ -54,6 +54,8 @@ python app.py
 ```
 
 The server listens on `0.0.0.0:5001`, so open `http://localhost:5001` in your browser. Fill out the form and submit to start the swap process.
+
+The frontend polls the `/progress` endpoint during a swap to display live log messages so you can monitor each stage of the migration.
 
 ## VPC and EC2 Migration
 
