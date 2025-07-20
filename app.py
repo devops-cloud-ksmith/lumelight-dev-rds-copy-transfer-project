@@ -19,13 +19,14 @@ def swap_endpoint():
     data = request.get_json(force=True)
     order_no = data.get('orderNo')
     src_profile = data.get('srcProfile')
+    src_profiles = data.get('srcProfiles')  # optional mapping region->profile
     dest_profile = data.get('destProfile')
     regions = data.get('regions') or ['us-west-2', 'us-east-2']
     dest_region = data.get('destRegion', 'us-west-2')
     db_class = data.get('dbClass', 'db.t3.micro')
 
-    if not order_no or not src_profile or not dest_profile:
-        return jsonify({'error': 'orderNo, srcProfile and destProfile required'}), 400
+    if not order_no or not dest_profile or (not src_profile and not src_profiles):
+        return jsonify({'error': 'orderNo and profiles required'}), 400
 
     logger.info('Starting swap process for orderNo=%s', order_no)
     executor.submit(
@@ -36,6 +37,7 @@ def swap_endpoint():
         regions,
         dest_region,
         db_class,
+        src_profiles,
     )
     return jsonify({'status': 'started'})
 

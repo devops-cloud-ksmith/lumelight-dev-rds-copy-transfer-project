@@ -18,7 +18,10 @@
         const data = new FormData(e.target);
         const payload = {
           orderNo: data.get('orderNo'),
-          srcProfile: data.get('srcProfile'),
+          srcProfiles: {
+            'us-west-2': data.get('srcProfileWest'),
+            'us-east-2': data.get('srcProfileEast'),
+          },
           destProfile: data.get('destProfile'),
           regions: data.get('regions').split(' ').filter(Boolean),
           destRegion: data.get('destRegion'),
@@ -40,12 +43,22 @@
               <input className="form-control" name="orderNo" required />
             </div>
             <div className="mb-3">
-              <label className="form-label">Source Profile</label>
-              <input className="form-control" name="srcProfile" required />
+              <label className="form-label">Source Profile (us-west-2)</label>
+              <select className="form-select" name="srcProfileWest">
+                <option value="prodw">prodw</option>
+              </select>
+            </div>
+            <div className="mb-3">
+              <label className="form-label">Source Profile (us-east-2)</label>
+              <select className="form-select" name="srcProfileEast">
+                <option value="prode">prode</option>
+              </select>
             </div>
             <div className="mb-3">
               <label className="form-label">Destination Profile</label>
-              <input className="form-control" name="destProfile" required />
+              <select className="form-select" name="destProfile">
+                <option value="devw">devw</option>
+              </select>
             </div>
             <div className="mb-3">
               <label className="form-label">Regions (space separated)</label>

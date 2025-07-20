@@ -24,6 +24,12 @@ The script will:
 
 Restored instances will have the `orderNo` tag applied. The process runs concurrently for all specified regions to speed up execution.
 
+When using the web interface you can select AWS CLI profiles from predefined dropdowns:
+
+- **Source us-west-2** – profile `prodw`
+- **Source us-east-2** – profile `prode`
+- **Destination us-west-2** – profile `devw`
+
 ## Web UI
 
 You can also launch a small Flask application that exposes the functionality via a REST endpoint and a lightweight React + Bootstrap interface.

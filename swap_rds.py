@@ -89,14 +89,18 @@ def restore_from_snapshot(dest_rds, snapshot_id, instance_id, db_class, order_no
     logger.info('Restored instance %s is available', instance_id)
 
 
-def process_region(args, region, src_account_id, dest_account_id):
-    src_session = boto3.Session(profile_name=args.src_profile)
-    dest_session = boto3.Session(profile_name=args.dest_profile)
+def process_region(order_no, src_profile, dest_profile, region, dest_region, db_class):
+    """Handle the snapshot copy and restore for a single region."""
+    src_session = boto3.Session(profile_name=src_profile)
+    dest_session = boto3.Session(profile_name=dest_profile)
+
+    src_account_id = get_account_id(src_session)
+    dest_account_id = get_account_id(dest_session)
 
     src_rds = src_session.client('rds', region_name=region)
-    dest_rds = dest_session.client('rds', region_name=args.dest_region)
+    dest_rds = dest_session.client('rds', region_name=dest_region)
 
-    instances = get_rds_instances(src_session, region, args.order_no)
+    instances = get_rds_instances(src_session, region, order_no)
     for inst in instances:
         inst_id = inst['DBInstanceIdentifier']
         snap_id = create_snapshot(src_rds, inst_id)
@@ -104,33 +108,48 @@ def process_region(args, region, src_account_id, dest_account_id):
         dest_snap_id = f'copy-{snap_id}'
         copy_snapshot(dest_rds, region, snap_id, dest_snap_id, src_account_id)
         restore_id = f'{inst_id}-copy'
-        restore_from_snapshot(dest_rds, dest_snap_id, restore_id, args.db_class, args.order_no)
+        restore_from_snapshot(dest_rds, dest_snap_id, restore_id, db_class, order_no)
 
 
-def run_swap(order_no, src_profile, dest_profile, regions=None, dest_region='us-west-2', db_class='db.t3.micro'):
-    """Run the snapshot copy and restore process programmatically."""
+def run_swap(order_no, src_profile, dest_profile, regions=None, dest_region='us-west-2', db_class='db.t3.micro', src_profiles=None):
+    """Run the snapshot copy and restore process programmatically.
+
+    Parameters
+    ----------
+    order_no : str
+        Value of the orderNo tag to filter instances.
+    src_profile : str
+        Default source AWS profile used when `src_profiles` is not provided.
+    dest_profile : str
+        Destination AWS profile.
+    regions : list[str], optional
+        Source regions to scan. Defaults to ``['us-west-2', 'us-east-2']``.
+    dest_region : str, optional
+        Region where the snapshots will be restored. Defaults to ``'us-west-2'``.
+    db_class : str, optional
+        DB instance class when restoring from snapshots.
+    src_profiles : dict[str, str], optional
+        Mapping of region to source profile. Overrides ``src_profile`` for the
+        specified regions.
+    """
     if regions is None:
         regions = ['us-west-2', 'us-east-2']
 
-    args = argparse.Namespace(
-        order_no=order_no,
-        src_profile=src_profile,
-        dest_profile=dest_profile,
-        regions=regions,
-        dest_region=dest_region,
-        db_class=db_class,
-    )
-
-    src_session = boto3.Session(profile_name=args.src_profile)
-    dest_session = boto3.Session(profile_name=args.dest_profile)
-
-    src_account_id = get_account_id(src_session)
-    dest_account_id = get_account_id(dest_session)
+    if src_profiles is None:
+        src_profiles = {region: src_profile for region in regions}
 
     with ThreadPoolExecutor() as executor:
         futures = [
-            executor.submit(process_region, args, reg, src_account_id, dest_account_id)
-            for reg in args.regions
+            executor.submit(
+                process_region,
+                order_no,
+                src_profiles.get(region, src_profile),
+                dest_profile,
+                region,
+                dest_region,
+                db_class,
+            )
+            for region in regions
         ]
         for f in futures:
             f.result()
