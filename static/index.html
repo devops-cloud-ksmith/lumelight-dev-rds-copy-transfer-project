@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AWS Migration Tool</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <script crossorigin src="https://unpkg.com/react@17/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+</head>
+<body class="p-4">
+  <div id="root"></div>
+  <script type="text/babel">
+    function SwapForm() {
+      const [status, setStatus] = React.useState('');
+      const [instances, setInstances] = React.useState([]);
+      const [log, setLog] = React.useState([]);
+      const [region, setRegion] = React.useState('us-west-2');
+      const [destRegion, setDestRegion] = React.useState('us-west-2');
+      const [polling, setPolling] = React.useState(false);
+      const [configData, setConfigData] = React.useState(null);
+
+      React.useEffect(() => {
+        fetch('/config')
+          .then(res => res.json())
+          .then(setConfigData)
+          .catch(() => {});
+      }, []);
+
+      const orderOptions = configData ? (configData.orderConfig[region] || []) : [];
+
+      const handleFetch = () => {
+        const data = new FormData(document.querySelector('#swap-form'));
+        const regionSelect = document.querySelector('select[name="regions"]');
+        const regions = Array.from(regionSelect.selectedOptions).map(o => o.value);
+        const params = new URLSearchParams({
+          orderNo: data.get('orderNo'),
+          regions: regions.join(' '),
+          srcProfiles: JSON.stringify({
+            'us-west-2': data.get('srcProfileWest'),
+            'us-east-2': data.get('srcProfileEast'),
+          }),
+        });
+        fetch('/resources?' + params.toString())
+          .then(res => res.json())
+          .then(setInstances)
+          .catch(() => setInstances([]));
+      };
+
+      const handleSubmit = e => {
+        e.preventDefault();
+        const data = new FormData(e.target);
+        const selected = Array.from(document.querySelectorAll('input[id^="inst-"]:checked')).map(cb => {
+          const [region, id] = cb.value.split('|');
+          return { region, id };
+        });
+        const regionSelect = document.querySelector('select[name="regions"]');
+        const regions = Array.from(regionSelect.selectedOptions).map(o => o.value);
+        const payload = {
+          orderNo: data.get('orderNo'),
+          srcProfiles: {
+            'us-west-2': data.get('srcProfileWest'),
+            'us-east-2': data.get('srcProfileEast'),
+          },
+          destProfile: data.get('destProfile'),
+          regions,
+          destRegion: destRegion,
+          dbClass: data.get('dbClass'),
+          instances: selected,
+        };
+        fetch('/swap', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+          .then(res => res.json())
+          .then(d => {
+            setStatus(JSON.stringify(d));
+            setPolling(true);
+          })
+          .catch(() => setStatus('Error'));
+      };
+
+      React.useEffect(() => {
+        if (!polling) return;
+        const id = setInterval(() => {
+          fetch('/progress')
+            .then(res => res.json())
+            .then(setLog)
+            .catch(() => {});
+        }, 2000);
+        return () => clearInterval(id);
+      }, [polling]);
+
+      return (
+        <div>
+          <form id="swap-form" onSubmit={handleSubmit}>
+            <div className="row g-3">
+              <div className="col-md-2">
+                <label className="form-label">Region</label>
+                <select className="form-select" value={region} onChange={e => setRegion(e.target.value)}>
+                  <option value="us-west-2">us-west-2</option>
+                  <option value="us-east-2">us-east-2</option>
+                </select>
+              </div>
+              <div className="col-md-2">
+                <label className="form-label">orderNo</label>
+                <select className="form-select" name="orderNo">
+                  {orderOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div className="col-md-3">
+                <label className="form-label">Src Profile us-west-2</label>
+                <select className="form-select" name="srcProfileWest">
+                  {configData && <option value={configData.srcProfiles['us-west-2']}>{configData.srcProfiles['us-west-2']}</option>}
+                </select>
+              </div>
+              <div className="col-md-3">
+                <label className="form-label">Src Profile us-east-2</label>
+                <select className="form-select" name="srcProfileEast">
+                  {configData && <option value={configData.srcProfiles['us-east-2']}>{configData.srcProfiles['us-east-2']}</option>}
+                </select>
+              </div>
+              <div className="col-md-2">
+                <label className="form-label">Dest Profile</label>
+                <select className="form-select" name="destProfile">
+                  {configData && <option value={configData.destProfiles['us-west-2']}>{configData.destProfiles['us-west-2']}</option>}
+                </select>
+              </div>
+              <div className="col-md-2">
+                <label className="form-label">Regions</label>
+                <select className="form-select" name="regions" multiple size="2" defaultValue={[region]}>
+                  {configData && Object.keys(configData.orderConfig).map(r => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-md-2">
+                <label className="form-label">Dest Region</label>
+                <select className="form-select" name="destRegion" value={destRegion} onChange={e => setDestRegion(e.target.value)}>
+                  {configData && Object.keys(configData.destProfiles).map(r => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-md-2">
+                <label className="form-label">DB Class</label>
+                <input className="form-control" name="dbClass" defaultValue="db.t3.micro" />
+              </div>
+            </div>
+            <div className="mt-3">
+              <button type="button" className="btn btn-secondary me-2" onClick={handleFetch}>List Instances</button>
+              <button type="submit" className="btn btn-primary">Start Swap</button>
+            </div>
+          </form>
+          {instances.length > 0 && (
+            <div className="mt-3">
+              <p>Select instances to swap:</p>
+              {instances.map((i, idx) => (
+                <div className="form-check" key={idx}>
+                  <input className="form-check-input" type="checkbox" value={`${i.region}|${i.id}`} id={`inst-${idx}`} />
+                  <label className="form-check-label" htmlFor={`inst-${idx}`}>{i.region}: {i.id} {i.name ? `(${i.name})` : ''}</label>
+                </div>
+              ))}
+            </div>
+          )}
+          {status && <pre className="mt-3">{status}</pre>}
+          {log.length > 0 && (
+            <pre className="mt-3 bg-light p-2" style={{maxHeight: '200px', overflowY: 'auto'}}>{log.join('\n')}</pre>
+          )}
+        </div>
+      );
+    }
+
+    function MigrateForm() {
+      const [status, setStatus] = React.useState('');
+
+      const handleSubmit = e => {
+        e.preventDefault();
+        const data = new FormData(e.target);
+        const payload = {
+          orderNo: data.get('orderNo'),
+          srcProfile: data.get('srcProfile'),
+          destProfile: data.get('destProfile'),
+          region: data.get('region'),
+          instanceType: data.get('instanceType'),
+        };
+        fetch('/migrate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+          .then(res => res.json())
+          .then(d => setStatus(JSON.stringify(d)))
+          .catch(() => setStatus('Error'));
+      };
+
+      return (
+        <form id="migrate-form" onSubmit={handleSubmit}>
+          <div className="row g-3">
+            <div className="col-md-2">
+              <label className="form-label">orderNo</label>
+              <input className="form-control" name="orderNo" required />
+            </div>
+            <div className="col-md-3">
+              <label className="form-label">Source Profile</label>
+              <input className="form-control" name="srcProfile" required />
+            </div>
+            <div className="col-md-3">
+              <label className="form-label">Destination Profile</label>
+              <input className="form-control" name="destProfile" required />
+            </div>
+            <div className="col-md-2">
+              <label className="form-label">Region</label>
+              <input className="form-control" name="region" value="us-west-2" />
+            </div>
+            <div className="col-md-2">
+              <label className="form-label">Instance Type</label>
+              <input className="form-control" name="instanceType" value="t3.micro" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <button type="submit" className="btn btn-primary">Start Migration</button>
+          </div>
+          {status && <pre className="mt-3">{status}</pre>}
+        </form>
+      );
+    }
+
+    function FlowView() {
+      return (
+        <div className="row mt-4">
+          <div className="col-md-6">
+            <h4>RDS Swap Flow</h4>
+            <ol>
+              <li>Select instances by <code>orderNo</code>.</li>
+              <li>Create snapshots without reboot.</li>
+              <li>Share and copy snapshots to destination.</li>
+              <li>Restore new instances and tag with <code>orderNo</code>.</li>
+            </ol>
+          </div>
+          <div className="col-md-6">
+            <h4>VPC &amp; EC2 Migration Flow</h4>
+            <ol>
+              <li>Find VPCs and instances with matching <code>orderNo</code>.</li>
+              <li>Replicate VPC structure and tags.</li>
+              <li>Create and share AMIs of source instances.</li>
+              <li>Copy AMIs and launch instances in destination.</li>
+            </ol>
+          </div>
+        </div>
+      );
+    }
+
+    function App() {
+      const [tab, setTab] = React.useState('swap');
+
+      return (
+        <div className="container">
+          <h1 className="mb-4">AWS Migration Tool</h1>
+          <ul className="nav nav-tabs mb-3">
+            <li className="nav-item">
+              <button className={`nav-link ${tab === 'swap' ? 'active' : ''}`} onClick={() => setTab('swap')}>Swap RDS</button>
+            </li>
+            <li className="nav-item">
+              <button className={`nav-link ${tab === 'migrate' ? 'active' : ''}`} onClick={() => setTab('migrate')}>Migrate VPC & EC2</button>
+            </li>
+            <li className="nav-item">
+              <button className={`nav-link ${tab === 'flow' ? 'active' : ''}`} onClick={() => setTab('flow')}>Flow Overview</button>
+            </li>
+          </ul>
+          {tab === 'swap' && <SwapForm />}
+          {tab === 'migrate' && <MigrateForm />}
+          {tab === 'flow' && <FlowView />}
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
