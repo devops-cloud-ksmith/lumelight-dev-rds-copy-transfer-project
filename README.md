@@ -23,6 +23,7 @@ The script will:
 4. Restore new RDS instances in the destination region from those snapshots.
 
 Restored instances will have the `orderNo` tag applied. The process runs concurrently for all specified regions to speed up execution.
+Important settings such as subnet groups, security groups and network accessibility are copied from the source instance so the replacement behaves the same in the target account.
 
 When using the web interface you can select AWS CLI profiles from predefined dropdowns:
 
@@ -30,11 +31,16 @@ When using the web interface you can select AWS CLI profiles from predefined dro
 - **Source us-east-2** – profile `prode`
 - **Destination us-west-2** – profile `devw`
 
-The `orderNo` field is provided as a dropdown with values `01` through `99`. You can fetch the list of matching RDS instances before starting the swap.
+The `orderNo` dropdown is generated from a configuration mapping:
+
+- `us-east-2` &ndash; values `01`&ndash;`03`
+- `us-west-2` &ndash; values `04`&ndash;`20`
+
+The web page allows you to list resources for a chosen order number and select which specific instances to swap.
 
 ### List resources
 
-Send a GET request to `/resources` with `orderNo`, `regions`, and `srcProfiles` parameters to retrieve the instances that will be processed. The parameters mirror those used for `/swap`.
+Send a GET request to `/resources` with `orderNo`, `regions`, and `srcProfiles` parameters to retrieve matching RDS instances. Each entry in the response includes the region, instance identifier and DB name. The web UI displays checkboxes so you can choose exactly which sources to snapshot and swap.
 
 ## Web UI
 

@@ -1,6 +1,7 @@
 import argparse
 import logging
 import time
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 
 import boto3
@@ -43,6 +44,18 @@ def get_rds_instances(session, region, order_no):
     return instances
 
 
+def get_instance_settings(inst):
+    """Extract settings from a source RDS instance for restoration."""
+    settings = {
+        'DBSubnetGroupName': inst.get('DBSubnetGroup', {}).get('DBSubnetGroupName'),
+        'VpcSecurityGroupIds': [sg['VpcSecurityGroupId'] for sg in inst.get('VpcSecurityGroups', [])],
+        'MultiAZ': inst.get('MultiAZ', False),
+        'PubliclyAccessible': inst.get('PubliclyAccessible', False),
+        'StorageType': inst.get('StorageType'),
+    }
+    return settings
+
+
 def create_snapshot(rds, instance_id):
     snap_id = f'{instance_id}-{int(time.time())}'
     logger.info('Creating snapshot %s', snap_id)
@@ -75,13 +88,24 @@ def copy_snapshot(dest_rds, source_region, snapshot_id, dest_snapshot_id, source
     logger.info('Snapshot copy %s is ready', dest_snapshot_id)
 
 
-def restore_from_snapshot(dest_rds, snapshot_id, instance_id, db_class, order_no):
+def restore_from_snapshot(dest_rds, snapshot_id, instance_id, db_class, order_no, settings):
     logger.info('Restoring instance %s from snapshot %s', instance_id, snapshot_id)
-    dest_rds.restore_db_instance_from_db_snapshot(
-        DBInstanceIdentifier=instance_id,
-        DBSnapshotIdentifier=snapshot_id,
-        DBInstanceClass=db_class
-    )
+    params = {
+        'DBInstanceIdentifier': instance_id,
+        'DBSnapshotIdentifier': snapshot_id,
+        'DBInstanceClass': db_class,
+    }
+    if settings.get('DBSubnetGroupName'):
+        params['DBSubnetGroupName'] = settings['DBSubnetGroupName']
+    if settings.get('VpcSecurityGroupIds'):
+        params['VpcSecurityGroupIds'] = settings['VpcSecurityGroupIds']
+    if settings.get('MultiAZ') is not None:
+        params['MultiAZ'] = settings['MultiAZ']
+    if settings.get('PubliclyAccessible') is not None:
+        params['PubliclyAccessible'] = settings['PubliclyAccessible']
+    if settings.get('StorageType'):
+        params['StorageType'] = settings['StorageType']
+    dest_rds.restore_db_instance_from_db_snapshot(**params)
     waiter = dest_rds.get_waiter('db_instance_available')
     waiter.wait(DBInstanceIdentifier=instance_id)
     arn = dest_rds.describe_db_instances(DBInstanceIdentifier=instance_id)['DBInstances'][0]['DBInstanceArn']
@@ -106,7 +130,7 @@ def list_instances(order_no, src_profile, regions=None, src_profiles=None):
     Returns
     -------
     list[dict]
-        Each dict contains ``region`` and ``id`` of an RDS instance.
+        Each dict contains ``region``, ``id`` and ``name`` of an RDS instance.
     """
     if regions is None:
         regions = ['us-west-2', 'us-east-2']
@@ -119,11 +143,15 @@ def list_instances(order_no, src_profile, regions=None, src_profiles=None):
         session = boto3.Session(profile_name=src_profiles.get(region, src_profile))
         instances = get_rds_instances(session, region, order_no)
         for inst in instances:
-            results.append({'region': region, 'id': inst['DBInstanceIdentifier']})
+            results.append({
+                'region': region,
+                'id': inst['DBInstanceIdentifier'],
+                'name': inst.get('DBName')
+            })
     return results
 
 
-def process_region(order_no, src_profile, dest_profile, region, dest_region, db_class):
+def process_region(order_no, src_profile, dest_profile, region, dest_region, db_class, instance_ids=None):
     """Handle the snapshot copy and restore for a single region."""
     src_session = boto3.Session(profile_name=src_profile)
     dest_session = boto3.Session(profile_name=dest_profile)
@@ -134,18 +162,25 @@ def process_region(order_no, src_profile, dest_profile, region, dest_region, db_
     src_rds = src_session.client('rds', region_name=region)
     dest_rds = dest_session.client('rds', region_name=dest_region)
 
-    instances = get_rds_instances(src_session, region, order_no)
+    if instance_ids is None:
+        instances = get_rds_instances(src_session, region, order_no)
+    else:
+        instances = []
+        for iid in instance_ids:
+            inst = src_rds.describe_db_instances(DBInstanceIdentifier=iid)['DBInstances'][0]
+            instances.append(inst)
     for inst in instances:
         inst_id = inst['DBInstanceIdentifier']
+        settings = get_instance_settings(inst)
         snap_id = create_snapshot(src_rds, inst_id)
         share_snapshot(src_rds, snap_id, dest_account_id)
         dest_snap_id = f'copy-{snap_id}'
         copy_snapshot(dest_rds, region, snap_id, dest_snap_id, src_account_id)
         restore_id = f'{inst_id}-copy'
-        restore_from_snapshot(dest_rds, dest_snap_id, restore_id, db_class, order_no)
+        restore_from_snapshot(dest_rds, dest_snap_id, restore_id, db_class, order_no, settings)
 
 
-def run_swap(order_no, src_profile, dest_profile, regions=None, dest_region='us-west-2', db_class='db.t3.micro', src_profiles=None):
+def run_swap(order_no, src_profile, dest_profile, regions=None, dest_region='us-west-2', db_class='db.t3.micro', src_profiles=None, instances=None):
     """Run the snapshot copy and restore process programmatically.
 
     Parameters
@@ -165,12 +200,20 @@ def run_swap(order_no, src_profile, dest_profile, regions=None, dest_region='us-
     src_profiles : dict[str, str], optional
         Mapping of region to source profile. Overrides ``src_profile`` for the
         specified regions.
+    instances : list[dict], optional
+        Specific instances to process. Each dict must include ``region`` and ``id``.
     """
     if regions is None:
         regions = ['us-west-2', 'us-east-2']
 
     if src_profiles is None:
         src_profiles = {region: src_profile for region in regions}
+
+    region_instances = defaultdict(list)
+    if instances:
+        for inst in instances:
+            region_instances[inst['region']].append(inst['id'])
+        regions = list(region_instances.keys())
 
     with ThreadPoolExecutor() as executor:
         futures = [
@@ -182,6 +225,7 @@ def run_swap(order_no, src_profile, dest_profile, regions=None, dest_region='us-
                 region,
                 dest_region,
                 db_class,
+                region_instances.get(region) if instances else None,
             )
             for region in regions
         ]

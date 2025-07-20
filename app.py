@@ -52,6 +52,7 @@ def swap_endpoint():
     regions = data.get('regions') or ['us-west-2', 'us-east-2']
     dest_region = data.get('destRegion', 'us-west-2')
     db_class = data.get('dbClass', 'db.t3.micro')
+    instances = data.get('instances')
 
     if not order_no or not dest_profile or (not src_profile and not src_profiles):
         return jsonify({'error': 'orderNo and profiles required'}), 400
@@ -66,6 +67,7 @@ def swap_endpoint():
         dest_region,
         db_class,
         src_profiles,
+        instances,
     )
     return jsonify({'status': 'started'})
 

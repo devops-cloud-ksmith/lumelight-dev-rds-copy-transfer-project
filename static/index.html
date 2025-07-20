@@ -15,14 +15,19 @@
       const [status, setStatus] = React.useState('');
       const [instances, setInstances] = React.useState([]);
 
-      const orderOptions = [];
-      for (let i = 1; i <= 99; i++) {
-        orderOptions.push(i.toString().padStart(2, '0'));
-      }
+      const orderConfig = {
+        'us-east-2': ['01', '02', '03'],
+        'us-west-2': Array.from({length: 17}, (_, i) => String(i + 4).padStart(2, '0')),
+      };
+      const orderOptions = Array.from(new Set(Object.values(orderConfig).flat()));
 
       const handleSubmit = (e) => {
         e.preventDefault();
         const data = new FormData(e.target);
+        const selected = Array.from(document.querySelectorAll('input[id^="inst-"]:checked')).map(cb => {
+          const [region, id] = cb.value.split('|');
+          return { region, id };
+        });
         const payload = {
           orderNo: data.get('orderNo'),
           srcProfiles: {
@@ -32,7 +37,8 @@
           destProfile: data.get('destProfile'),
           regions: data.get('regions').split(' ').filter(Boolean),
           destRegion: data.get('destRegion'),
-          dbClass: data.get('dbClass')
+          dbClass: data.get('dbClass'),
+          instances: selected
         };
         fetch('/swap', {
           method: 'POST',
@@ -101,11 +107,15 @@
             <button type="submit" className="btn btn-primary">Start</button>
           </form>
           {instances.length > 0 && (
-            <ul className="mt-3">
+            <div className="mt-3">
+              <p>Select instances to swap:</p>
               {instances.map((i, idx) => (
-                <li key={idx}>{i.region}: {i.id}</li>
+                <div className="form-check" key={idx}>
+                  <input className="form-check-input" type="checkbox" value={`${i.region}|${i.id}`} id={`inst-${idx}`} />
+                  <label className="form-check-label" htmlFor={`inst-${idx}`}>{i.region}: {i.id} {i.name ? `(${i.name})` : ''}</label>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
           {status && <pre className="mt-3">{status}</pre>}
         </div>
